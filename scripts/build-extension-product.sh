@@ -21,6 +21,9 @@ fi
 if [[ -n "${TUNA_DEVELOPMENT_TEAM:-}" ]]; then
   BUILD_SETTINGS+=(DEVELOPMENT_TEAM="$TUNA_DEVELOPMENT_TEAM")
 fi
+if [[ -n "${TUNA_CODE_SIGN_IDENTITY:-}" ]]; then
+  BUILD_SETTINGS+=(CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$TUNA_CODE_SIGN_IDENTITY")
+fi
 
 run_build() {
   if [[ ${#BUILD_SETTINGS[@]} -gt 0 ]]; then

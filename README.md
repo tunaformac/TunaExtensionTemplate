@@ -1,7 +1,7 @@
 # Tuna Extension Starter
 
 Use this repository as a template for a new Tuna extension. It contains one extension declaration,
-one catalog, the released TunaKit binary package, and one command for the whole development loop.
+one catalog, the released TunaKit binary package, and one command-line tool for local development.
 
 ## Start
 
@@ -25,6 +25,31 @@ The command infers the only project and scheme in this repository. Other useful 
 ./scripts/tuna-extension package
 ```
 
-For CI, set `TUNA_DEVELOPMENT_TEAM` instead of changing the Xcode signing setting.
+The sample declaration sets explicit minimum Tuna and TunaKit versions. Change both to the oldest
+versions you actually test before distributing your extension; packaging fails if either is absent.
+For a one-off package, override the packaged compatibility values without editing the declaration:
+
+```bash
+MIN_TUNA=0.78 MIN_TUNAKIT=1.11.0 MIN_MACOS=15.0 \
+  ./scripts/tuna-extension package
+```
+
+Packaging requires a signed Release build. For an interactive setup, selecting your development
+team in Xcode is enough. For a non-interactive build, pass the team and the SHA-1 of an installed
+Apple Development identity:
+
+```bash
+security find-identity -v -p codesigning
+
+TUNA_DEVELOPMENT_TEAM=YOURTEAMID \
+TUNA_CODE_SIGN_IDENTITY=IDENTITY_SHA1 \
+  ./scripts/tuna-extension package
+```
+
+The package command reads the Swift declaration through Tuna. It finds Tuna in `/Applications` or
+`~/Applications`; when testing against another build, set `TUNA_BINARY` to that executable.
+
+The public store is curated during the beta. This starter creates the package for review but does
+not include store upload or release commands.
 
 Read the extension development guide at https://tunaformac.com/docs/extension-development.

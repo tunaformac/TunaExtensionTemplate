@@ -6,34 +6,26 @@ TARGET="${1:?Usage: ext-package.sh TARGET DESTINATION DERIVED_DATA}"
 DESTINATION="${2:?Usage: ext-package.sh TARGET DESTINATION DERIVED_DATA}"
 DERIVED_DATA="${3:?Usage: ext-package.sh TARGET DESTINATION DERIVED_DATA}"
 OUTDIR="$ROOT/dist/store"
-TEMP_SIGNING_KEY=""
 TEMP_DECLARATION_JSON=""
 
 cleanup() {
-  if [[ -n "$TEMP_SIGNING_KEY" && -f "$TEMP_SIGNING_KEY" ]]; then
-    rm -f "$TEMP_SIGNING_KEY"
-  fi
   if [[ -n "$TEMP_DECLARATION_JSON" && -f "$TEMP_DECLARATION_JSON" ]]; then
     rm -f "$TEMP_DECLARATION_JSON"
   fi
 }
 
 trap cleanup EXIT
-
-resolve_signing_key() {
-  if [[ -n "${SIGNING_KEY:-}" ]]; then
-    printf '%s\n' "$SIGNING_KEY"
-    return
-  fi
-
-  return
-}
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 SRC="$("$ROOT/scripts/build-extension-product.sh" "$TARGET" Release "$DESTINATION" "$DERIVED_DATA")"
 mkdir -p "$OUTDIR"
 
 if ! /usr/bin/codesign --verify --strict "$SRC" >/dev/null 2>&1; then
-  echo "The built extension is not signed. Select your development team in Xcode and rebuild." >&2
+  echo "The built extension is not signed." >&2
+  echo "Select your development team in Xcode, or set both" >&2
+  echo "TUNA_DEVELOPMENT_TEAM and TUNA_CODE_SIGN_IDENTITY, then rebuild." >&2
   exit 1
 fi
 
@@ -103,7 +95,7 @@ dump_extension_declaration() {
 
   # Assigned in the caller's shell (not a command substitution) so the EXIT
   # trap can clean it up.
-  TEMP_DECLARATION_JSON="$(mktemp "${TMPDIR:-/tmp}/tuna-extension-declaration.XXXXXX.json")"
+  TEMP_DECLARATION_JSON="$(mktemp "${TMPDIR:-/tmp}/tuna-extension-declaration.XXXXXX")"
   "$tuna_binary" --dump-extension-declaration "$SRC" >"$TEMP_DECLARATION_JSON"
 }
 
@@ -150,9 +142,7 @@ if [[ -z "$MIN_TUNA_VALUE" ]]; then
   echo "No min Tuna version: declare compatibility.minTuna in the extension or set MIN_TUNA." >&2
   exit 1
 fi
-if [[ -n "$MIN_TUNA_VALUE" ]]; then
-  ARGS+=(--min-tuna "$MIN_TUNA_VALUE")
-fi
+ARGS+=(--min-tuna "$MIN_TUNA_VALUE")
 
 MIN_TUNAKIT_VALUE="${MIN_TUNAKIT:-}"
 if [[ -z "$MIN_TUNAKIT_VALUE" ]]; then
@@ -166,9 +156,7 @@ if [[ -z "$MIN_TUNAKIT_VALUE" ]]; then
   echo "No min TunaKit version: declare compatibility.minTunaKit in the extension or set MIN_TUNAKIT." >&2
   exit 1
 fi
-if [[ -n "$MIN_TUNAKIT_VALUE" ]]; then
-  ARGS+=(--min-tunakit "$MIN_TUNAKIT_VALUE")
-fi
+ARGS+=(--min-tunakit "$MIN_TUNAKIT_VALUE")
 if [[ -n "${MIN_MACOS:-}" ]]; then
   ARGS+=(--min-macos "$MIN_MACOS")
 fi
@@ -178,9 +166,8 @@ if [[ -n "${ARCH:-}" ]]; then
   done
 fi
 
-SIGNING_KEY_PATH="$(resolve_signing_key)"
-if [[ -n "$SIGNING_KEY_PATH" ]]; then
-  ARGS+=(--signing-key "$SIGNING_KEY_PATH")
+if [[ -n "${SIGNING_KEY:-}" ]]; then
+  ARGS+=(--signing-key "$SIGNING_KEY")
 fi
 
 if [[ -n "${KEY_ID:-}" ]]; then
