@@ -53,3 +53,7 @@ The public store is curated during the beta. This starter creates the package fo
 not include store upload or release commands.
 
 Read the extension development guide at https://tunaformac.com/docs/extension-development.
+
+## License
+
+This starter is available under the [MIT License](LICENSE).
