@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-26
+            package: true
+          - arch: x86_64
+            runner: macos-26-intel
+            package: false
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Verify toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+          test "$(uname -m)" = "${{ matrix.arch }}"
+
+      - name: Install build tools
+        run: brew install ripgrep
+
+      - name: Configure ad-hoc signing
+        run: |
+          printf '%s\n' \
+            'CODE_SIGN_STYLE = Manual' \
+            'CODE_SIGN_IDENTITY = -' \
+            'DEVELOPMENT_TEAM =' \
+            > "$RUNNER_TEMP/ci-signing.xcconfig"
+          printf 'XCODE_XCCONFIG_FILE=%s\n' "$RUNNER_TEMP/ci-signing.xcconfig" \
+            >> "$GITHUB_ENV"
+
+      - name: Resolve the pinned public TunaKit package
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project TemplatePlugin.xcodeproj \
+            -scheme TemplatePlugin \
+            -derivedDataPath build/dd \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -disablePackageRepositoryCache
+
+      - name: Build the starter
+        run: |
+          product="$(./scripts/tuna-extension build --release)"
+          codesign --verify --strict "$product"
+
+      - name: Package the starter
+        if: matrix.package
+        run: |
+          declaration_reader="$RUNNER_TEMP/tuna-declaration"
+          printf '%s\n' \
+            '#!/usr/bin/env python3' \
+            'import json' \
+            'print(json.dumps({"identifier": "com.example.TemplatePlugin", "name": "Sample Extension", "author": "Your Name", "description": "Describe what your extension provides.", "icon_name": "puzzlepiece.extension", "type": "extension", "compatibility": {"min_tuna": "0.79", "min_tunakit": "1.12.0"}}))' \
+            > "$declaration_reader"
+          chmod +x "$declaration_reader"
+
+          TUNA_BINARY="$declaration_reader" \
+            ./scripts/tuna-extension package > build/package-item.json
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          package = Path("dist/store/com.example.TemplatePlugin-1.0.tunaextension")
+          item = json.loads(Path("build/package-item.json").read_text())
+
+          assert package.is_file()
+          assert item["id"] == "com.example.TemplatePlugin"
+          assert item["version"] == "1.0"
+          assert item["compatibility"]["min_tuna"] == "0.79"
+          assert item["compatibility"]["min_tunakit"] == "1.12.0"
+          assert item["download"]["checksum_sha256"] == hashlib.sha256(
+              package.read_bytes()
+          ).hexdigest()
+
+          with ZipFile(package) as archive:
+              manifest = json.loads(archive.read("tunaextension.json"))
+              assert manifest["id"] == "com.example.TemplatePlugin"
+              assert manifest["compatibility"]["min_tuna"] == "0.79"
+              assert manifest["compatibility"]["min_tunakit"] == "1.12.0"
+              assert "payload.sha256" in archive.namelist()
+              assert any(
+                  name.startswith("Payload/TemplatePlugin.framework/")
+                  for name in archive.namelist()
+              )
+          PY
