@@ -1,5 +1,10 @@
 # Tuna Extension Starter
 
+> [!IMPORTANT]
+> This repository describes the extension platform planned for Tuna 0.79. Tuna 0.79 has not been
+> released yet; the current public app is Tuna 0.78, so treat the instructions, compatibility
+> versions, and examples below as a release preview.
+
 Use this repository as a template for a new Tuna extension. It contains one extension declaration,
 one catalog, the released TunaKit binary package, and one command-line tool for local development.
 
